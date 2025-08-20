@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: event_management_db2
+    environment:
+      POSTGRES_DB: event_management
+      POSTGRES_USER: eventuser
+      POSTGRES_PASSWORD: eventpass123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5444:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventuser -d event_management"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - event_network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: event_management_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: event_management
+      DB_USER: eventuser
+      DB_PASSWORD: eventpass123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - event_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: event_management_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    networks:
+      - event_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  event_network:
+    driver: bridge
